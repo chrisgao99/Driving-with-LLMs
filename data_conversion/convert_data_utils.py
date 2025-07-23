@@ -192,7 +192,7 @@ def convert_to_descriptor_format(data):
     # Loop from t=0 to t=18 to generate snapshots in chronological order
     for t in range(19):
         ego_descriptor = np.zeros(len(EgoField), dtype=np.float32)
-        vehicle_descriptors = np.zeros((32, len(VehicleField)), dtype=np.float32)
+        vehicle_descriptors = np.zeros((30, len(VehicleField)), dtype=np.float32)
         pedestrian_descriptors = np.zeros((20, len(PedestrianField)), dtype=np.float32)
         road_descriptors = np.zeros((60, len(RoadField)), dtype=np.float32)
 
@@ -207,7 +207,7 @@ def convert_to_descriptor_format(data):
         # --- 2. Process Nearby Agents at time t ---
         vehicle_count = 0
         for agent_data in nearby_agents.values():
-            if vehicle_count >= 32: break
+            if vehicle_count >= 30: break
             accel, speed, x, y, heading, dx, dy = _process_agent_trajectory_at_time(agent_data['trajectory'], t)
             
             desc = vehicle_descriptors[vehicle_count]
@@ -266,7 +266,7 @@ if __name__ == '__main__':
     # Print shapes and a sample of the data to verify
     print("--- CONVERSION COMPLETE ---")
     for key, value in converted_data.items():
-        print(f"\nDescriptor: '{key}'")
+        print(f"Key: '{key}'")
         print(f"Shape: {value.shape}")
     
     print("\n--- Sample: Ego Descriptor ---")
