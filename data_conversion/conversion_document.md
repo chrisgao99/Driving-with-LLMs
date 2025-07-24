@@ -58,3 +58,8 @@ The final output for one input sample is a list containing 19 of these structure
 `convert_data` function from convert_data.py takes in one tfrecord file path and iterate through all the samples. For each sample, a list of 19 dicts data in time sequence will be print.
 
 For example, `/p/liverobotics/waymo_open_dataset_motion/tf_example/validation_interactive/validation_interactive_tfexample.tfrecord-00000-of-00150` has 49 scenarios (samples), so it will provide 49 lists. Each lists has 19 dicts so 49*19 datapoints in total.
+
+
+# How to get QA pairs for pretraining?
+
+`generate_qa_for_timestep` function in `QA_template.py` takes in one timestep data and ask 20 questions about simple understanding of the data. The answers will be directly found in the input data dict. 
