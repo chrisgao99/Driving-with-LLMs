@@ -3,7 +3,13 @@ import random
 from dataclasses import dataclass
 from enum import IntEnum
 from typing import Any, Dict, Optional, Tuple, Union
-from data_conversion.vector_utils_waymo_custom import VehicleField, PedestrianField, RoadField, EgoField, METRES_M_SCALE, VELOCITY_MS_SCALE, MS_TO_MPH
+import sys
+import os
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
+
+from vector_utils_waymo_custom import VehicleField, PedestrianField, RoadField, EgoField, METRES_M_SCALE, VELOCITY_MS_SCALE, MS_TO_MPH
 import numpy as np
 import torch
 
@@ -129,6 +135,123 @@ class VectorObservationConfig:
     num_max_static_vehicles: int = 10
     line_of_sight: bool = False
 
-# --- Randomization utils for generating synthetic data could be defined here ---
-# --- They would need to be updated to match the new IntEnum classes and data structures. ---
+# --- Randomization utils ---
+class Randomizable:
+    ENUM: Any = None
+    FIELD_TYPES_RANGES: Dict[str, Tuple[Any, Any]] = {}
 
+    @classmethod
+    def randomize(cls, vector: np.ndarray):
+        for field_name, (field_type, field_range) in cls.FIELD_TYPES_RANGES.items():
+            idx = getattr(cls.ENUM, field_name)
+            vector[idx] = random_value((field_type, field_range))
+
+
+def random_value(
+    field_type_range: Tuple[type, Tuple[float, float]],
+    prob: float = 0.5,
+) -> Union[int, float]:
+    field_type, field_range = field_type_range
+    if field_type == bool:
+        return 1 if random.random() < prob else 0
+    if field_type == float:
+        return random.uniform(*field_range)
+    if field_type == int:
+        return random.randint(*field_range)
+    raise ValueError(f"Unsupported field type: {field_type}")
+
+
+class VehicleFieldRandom(Randomizable):
+    ENUM = VehicleField
+    FIELD_TYPES_RANGES: Dict[str, Any] = {
+        "SPEED": (float, (0.0, 40.0)),  # 0 to ~90 mph
+        "X": (float, (-100.0, 100.0)), # Relative position in meters
+        "Y": (float, (-100.0, 100.0)),
+        "DX": (float, (-1.0, 1.0)),     # Normalized direction vector
+        "DY": (float, (-1.0, 1.0)),
+        "HEADING": (float, (-math.pi, math.pi)), # Radians
+    }
+
+
+class PedestrianFieldRandom(Randomizable):
+    ENUM = PedestrianField
+    FIELD_TYPES_RANGES: Dict[str, Any] = {
+        "SPEED": (float, (0.0, 3.0)),   # 0 to ~7 mph (running)
+        "X": (float, (-50.0, 50.0)),    # Pedestrians are usually closer
+        "Y": (float, (-50.0, 50.0)),
+        "DX": (float, (-1.0, 1.0)),
+        "DY": (float, (-1.0, 1.0)),
+        "HEADING": (float, (-math.pi, math.pi)),
+    }
+
+
+class EgoFieldRandom(Randomizable):
+    ENUM = EgoField
+    FIELD_TYPES_RANGES: Dict[str, Any] = {
+        "ACCEL": (float, (-5.0, 3.0)), # m/s^2 (hard brake to strong accel)
+        "SPEED": (float, (0.0, 40.0)),
+        "X": (float, (-50.0, 50.0)),
+        "Y": (float, (-50.0, 50.0)),      
+        "HEADING": (float, (-math.pi, math.pi)),
+        "DX": (float, (-1.0, 1.0)),
+        "DY": (float, (-1.0, 1.0)),
+    }
+
+
+class RoadFieldRandom:
+    @staticmethod
+    def randomize(vector: np.ndarray):
+        # --- Randomize Polyline Points and Validity ---
+        num_valid_points = random.randint(2, 10) # Road features have at least 2 points
+        last_x, last_y = 0, 0
+        for i in range(10):
+            if i < num_valid_points:
+                # Point is valid
+                vector[getattr(RoadField, f"INVALID_{i+1}")] = 0
+                # Generate a new point relative to the last one to create a smooth line
+                last_x += random.uniform(-10, 10)
+                last_y += random.uniform(-10, 10)
+                vector[getattr(RoadField, f"X{i+1}")] = last_x
+                vector[getattr(RoadField, f"Y{i+1}")] = last_y
+            else:
+                # Point is invalid
+                vector[getattr(RoadField, f"INVALID_{i+1}")] = 1
+                # Zero out the coordinates for invalid points
+                vector[getattr(RoadField, f"X{i+1}")] = 0
+                vector[getattr(RoadField, f"Y{i+1}")] = 0
+
+        # --- Randomize Type (One-Hot Encoding) ---
+        type_fields = [field for field in RoadField if field.name.startswith("TYPE_")]
+        # Reset all type fields to 0
+        for field in type_fields:
+            vector[field.value] = 0
+        # Pick one random type and set it to 1
+        random_type = random.choice(type_fields)
+        vector[random_type.value] = 1
+
+
+@dataclass
+class VectorObservation:
+    ROAD_DIM = 46
+    VEHICLE_DIM = 6
+    PEDESTRIAN_DIM = 6
+    EGO_DIM = 7
+
+    road_descriptors: torch.FloatTensor
+    vehicle_descriptors: torch.FloatTensor
+    pedestrian_descriptors: torch.FloatTensor
+    ego_vehicle_descriptor: torch.FloatTensor
+    liable_vehicles: Optional[torch.FloatTensor] = None
+
+
+class VectorObservationConfig:
+    num_road_points: int = 60
+    num_vehicle_slots: int = 30
+    num_pedestrian_slots: int = 20
+
+    radius_m: float = 100.0
+    pedestrian_radius_m: float = 50.0
+    pedestrian_angle_threshold_rad: float = math.pi / 2
+    route_spacing_m: float = 2.0
+    num_max_static_vehicles: int = 10
+    line_of_sight: bool = False

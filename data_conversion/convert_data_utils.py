@@ -263,9 +263,6 @@ if __name__ == '__main__':
 
     converted_data = converted_data[1]  # Get the first time step for demonstration
 
-    print(converted_data)
-
-    breakpoint()
     # Print shapes and a sample of the data to verify
     print("--- CONVERSION COMPLETE ---")
     for key, value in converted_data.items():
