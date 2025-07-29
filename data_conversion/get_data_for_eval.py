@@ -394,7 +394,7 @@ def run_vectorize_process(filename, setting="default"):
         "map_dict": map_dict,
         "tf_cleaned_traj_dict": tf_cleaned_traj_dict,
         "language_condition_data": language_condition_data,
-        "valid_indices": valid_indices, # Return this to guide the iteration
+        "valid_indices": valid_indices, 
         "testing_sid": testing_sid,
         "testing_ego_id": testing_ego_id,
         "testing_map": testing_map,

@@ -9,7 +9,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
-from vector_utils_waymo_custom import VehicleField, PedestrianField, RoadField, EgoField, METRES_M_SCALE, VELOCITY_MS_SCALE, MS_TO_MPH
+from data_conversion.vector_utils_waymo_custom import VehicleField, PedestrianField, RoadField, EgoField, METRES_M_SCALE, VELOCITY_MS_SCALE, MS_TO_MPH
 import numpy as np
 import torch
 

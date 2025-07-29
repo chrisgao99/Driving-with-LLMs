@@ -1,5 +1,10 @@
 import numpy as np
-from vector_utils_waymo_custom import VehicleField, PedestrianField, RoadField, EgoField
+import os
+import sys
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
+from data_conversion.vector_utils_waymo_custom import VehicleField, PedestrianField, RoadField, EgoField
 
 
 # def get_heading(trajectory):
@@ -247,6 +252,11 @@ def convert_to_descriptor_format(data):
         list_of_converted_data.append(data_at_t)
 
     return list_of_converted_data
+
+def get_qa_for_descriptor(list_of_converted_data):
+
+
+    return 0
 
 
 if __name__ == '__main__':

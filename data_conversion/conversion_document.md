@@ -51,6 +51,13 @@ For each of the 19 time steps, the following four `numpy` arrays are created and
 
 The final output for one input sample is a list containing 19 of these structured dictionaries, representing the scene in full chronological order.
 
+### Step 4: Final Descriptor + QA for stage 2 LLM finetuning
+
+For each time step data, one generated language description and 17 QA will be added. They will be saved in the following format:
+
+```
+{"observation": one timestep descriptor data dict, "input_prompt":generated language,"response_content": 17 QA,}
+```
 
 
 # How to use the code?
@@ -59,6 +66,8 @@ The final output for one input sample is a list containing 19 of these structure
 
 For example, `/p/liverobotics/waymo_open_dataset_motion/tf_example/validation_interactive/validation_interactive_tfexample.tfrecord-00000-of-00150` has 49 scenarios (samples), so it will provide 49 lists. Each lists has 19 dicts so 49*19 datapoints in total.
 
+
+`convert_data_language` function from convert_data_language.py derives from `convert_data`. It returns a list of 19 dicts just like `convert_data` except in each dict  there will be one timestep descriptor data dict, plus 17 QA including next waypoint prediction and one generated lanuaged description. 
 
 # How to get QA pairs for pretraining?
 
