@@ -4,7 +4,7 @@ from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 
-from get_data_utils import process_map_data, extract_tfrecord, format_dict, extract_road_segments
+from data_conversion.get_data_utils import process_map_data, extract_tfrecord, format_dict, extract_road_segments
 
 
 def process_traj_data(trajectories_dict, ego_agent_id, proximity_radius=5.0):
@@ -240,7 +240,7 @@ def downsample_trajectories(tf_cleaned_traj_dict, frequency_step=5):
         processed_traj_dict[scene_id] = processed_agents
     return processed_traj_dict
 
-def run_vectorize_process(filename, setting="default"):
+def run_vectorize_process(filename, setting="language_condition"):
     keys_of_interest = [
         'roadgraph_samples/xyz', 
         'roadgraph_samples/dir', 

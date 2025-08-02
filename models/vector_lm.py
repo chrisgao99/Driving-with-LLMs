@@ -7,8 +7,8 @@ from torch.nn import CrossEntropyLoss
 from transformers import GenerationConfig, LlamaForCausalLM
 from transformers.modeling_outputs import CausalLMOutputWithPast
 
-from models.vector_encoder import VectorEncoder, VectorEncoderConfig
-from utils.vector_utils import VectorObservation, VectorObservationConfig
+from models.new_vector_encoder import VectorEncoder, VectorEncoderConfig
+from utils.new_vector_utils import VectorObservation, VectorObservationConfig
 
 
 class LlamaForCausalLMVectorInput(LlamaForCausalLM):
@@ -42,7 +42,7 @@ class LlamaForCausalLMVectorInput(LlamaForCausalLM):
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        route_descriptors=None,
+        road_descriptors=None,
         vehicle_descriptors=None,
         pedestrian_descriptors=None,
         ego_vehicle_descriptor=None,
@@ -181,14 +181,14 @@ class VectorLMWithLoRA(PeftModelForCausalLM):
         input_ids,
         attention_mask,
         labels,
-        route_descriptors,
+        road_descriptors,
         vehicle_descriptors,
         pedestrian_descriptors,
         ego_vehicle_descriptor,
     ):
         # Create the vector observation
         vector_obs = VectorObservation(
-            route_descriptors=route_descriptors,
+            road_descriptors=road_descriptors,
             vehicle_descriptors=vehicle_descriptors,
             pedestrian_descriptors=pedestrian_descriptors,
             ego_vehicle_descriptor=ego_vehicle_descriptor,
@@ -221,7 +221,7 @@ class VectorLMWithLoRA(PeftModelForCausalLM):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        route_descriptors=None,
+        road_descriptors=None,
         vehicle_descriptors=None,
         pedestrian_descriptors=None,
         ego_vehicle_descriptor=None,
@@ -231,7 +231,7 @@ class VectorLMWithLoRA(PeftModelForCausalLM):
             input_ids,
             attention_mask,
             labels,
-            route_descriptors,
+            road_descriptors,
             vehicle_descriptors,
             pedestrian_descriptors,
             ego_vehicle_descriptor,
@@ -252,13 +252,13 @@ class VectorLMWithLoRA(PeftModelForCausalLM):
         return {"loss": loss}
 
     def generate(self, **kwargs):
-        route_descriptors = kwargs["route_descriptors"]
+        road_descriptors = kwargs["road_descriptors"]
         vehicle_descriptors = kwargs["vehicle_descriptors"]
         pedestrian_descriptors = kwargs["pedestrian_descriptors"]
         ego_vehicle_descriptor = kwargs["ego_vehicle_descriptor"]
 
         vector_obs = VectorObservation(
-            route_descriptors=route_descriptors,
+            road_descriptors=road_descriptors,
             vehicle_descriptors=vehicle_descriptors,
             pedestrian_descriptors=pedestrian_descriptors,
             ego_vehicle_descriptor=ego_vehicle_descriptor,

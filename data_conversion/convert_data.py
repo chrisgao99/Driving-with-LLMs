@@ -1,6 +1,6 @@
 import numpy as np
-from convert_data_utils import convert_to_descriptor_format
-from get_data_for_eval import run_vectorize_process, find_nearby_road, find_nearby_agents
+from data_conversion.convert_data_utils import convert_to_descriptor_format
+from data_conversion.get_data_for_eval import run_vectorize_process, find_nearby_road, find_nearby_agents
 
 
 def convert_data(tfrecord_path):
@@ -21,6 +21,8 @@ def convert_data(tfrecord_path):
     language_condition_data = data["language_condition_data"]
     valid_indices = data["valid_indices"]
 
+    output_data = {}
+
     # for every one map in map_dict, find the corresponding ego trajectory and other agents' trajectories
     map_count = 0
     for sid_egoid, road_segments_list in map_dict.items():
@@ -28,7 +30,6 @@ def convert_data(tfrecord_path):
         sid = parts[0]
         ego_id = int(parts[1])
         ego_traj = tf_cleaned_traj_dict[sid][ego_id]
-        print(f"Processing scenario {sid} with ego ID {ego_id} and trajectory {ego_traj}")
 
         current_road, other_nearby_road = find_nearby_road(ego_traj['trajectory'], road_segments_list, proximity_threshold=5.0, n_road=6) # has keys 'type' and 'pos_xy'
 
@@ -45,14 +46,10 @@ def convert_data(tfrecord_path):
             'Ego Trajectory': ego_traj,
             'Nearby Agent Trajectories': other_agent_trajs
         }
-        #convert the data from one map to a list of 19 dicts, one for each time step
-        list_of_converted_data = convert_to_descriptor_format(sample_data)
-
-        map_count += 1
-        print(f"Converted data for scenario {sid} with ego ID {ego_id} to descriptor format.")
-        print(f"Number of time steps in converted data: {len(list_of_converted_data)}")     
-        print(f"Converted {map_count} maps so far.")
-        print("-----------------------------------------------------")
+        
+        output_data[sid_egoid] = sample_data
+    
+    return output_data
 
 
 if __name__ == '__main__':

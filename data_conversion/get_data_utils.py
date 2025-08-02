@@ -278,9 +278,9 @@ def extract_tfrecord(tfrecord_file, interested_keys, setting="default"):
         records_list.append(data_dict)
 
     if setting == "default":
-        records_list = records_list[:50] # pretraining
+        records_list = records_list[:50]
     elif setting == "language_condition":
-        records_list = records_list[50:100] # lang cond fine-tuning
+        records_list = records_list[50:100]
 
     return records_list
 

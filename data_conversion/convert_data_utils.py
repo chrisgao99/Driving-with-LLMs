@@ -1,9 +1,4 @@
 import numpy as np
-import os
-import sys
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-sys.path.append(parent_dir)
 from data_conversion.vector_utils_waymo_custom import VehicleField, PedestrianField, RoadField, EgoField
 
 
