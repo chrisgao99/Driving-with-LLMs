@@ -3,7 +3,11 @@ import traceback
 from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor
 import numpy as np
-
+import os
+import sys
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
 from data_conversion.get_data_utils import process_map_data, extract_tfrecord, format_dict, extract_road_segments
 
 
