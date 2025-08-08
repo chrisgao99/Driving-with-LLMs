@@ -18,7 +18,7 @@ class WaypointAgent:
         self.delimiter = "####"
         # It's better to get the API key from an environment variable,
         # but this will use the hardcoded key as requested.
-        self.api_key = "api key here"
+        self.api_key = "api key here"  # Replace with your actual OpenAI API key
         self.client = openai.OpenAI(api_key=self.api_key)
 
 
@@ -39,7 +39,7 @@ class WaypointAgent:
             acceleration = (speed - speed_prev) / dt
         return speed, heading_deg, acceleration
 
-    def generate_waypoint_prompt(self, scene_data: dict, current_time_idx: int) -> str:
+    def generate_waypoint_prompt(self, scene_data: dict, current_time_idx: int, ego_id: int) -> str:
         """Constructs a detailed prompt for an LLM to predict the next waypoint."""
         ego_traj = scene_data['Ego Trajectory']['trajectory']
         ego_x, ego_y = ego_traj[current_time_idx]
@@ -52,6 +52,10 @@ class WaypointAgent:
 
         surrounding_vehicles_desc = []
         for agent_id, agent_data in scene_data.get('Nearby Agent Trajectories', {}).items():
+            # *** FIX: Explicitly skip the ego vehicle ID ***
+            if agent_id == ego_id:
+                continue
+
             agent_traj = agent_data['trajectory']
             if current_time_idx >= len(agent_traj) or np.all(agent_traj[current_time_idx] == -1):
                 continue
@@ -258,11 +262,11 @@ def querry_gpt_dilu(tfrecord_path: str):
             predicted_trajectory_points.append(dynamic_ego_trajectory[i])
 
         # Loop through each valid time step for the current scenario
-        for time_idx in range(2, len(ego_traj_data['trajectory'])):
+        for time_idx in range(1, len(ego_traj_data['trajectory'])):
             print(f"\n-- Predicting for Timestep: {time_idx} --")
             
             # 1. Generate the prompt using the current state of the dynamic trajectory
-            final_prompt = agent.generate_waypoint_prompt(sample_data, current_time_idx=time_idx)
+            final_prompt = agent.generate_waypoint_prompt(sample_data, current_time_idx=time_idx, ego_id=ego_id)
             print(f"Generated Prompt:\n{final_prompt}\n")
             
             # 2. Query GPT with the prompt
