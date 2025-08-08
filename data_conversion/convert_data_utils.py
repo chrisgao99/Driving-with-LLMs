@@ -248,6 +248,10 @@ def convert_to_descriptor_format(data):
 
     return list_of_converted_data
 
+def get_qa_for_descriptor(list_of_converted_data):
+
+
+    return 0
 
 
 if __name__ == '__main__':

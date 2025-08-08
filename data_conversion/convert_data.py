@@ -44,7 +44,8 @@ def convert_data(tfrecord_path):
         sample_data = {
             'Map Data': road_segments_list,
             'Ego Trajectory': ego_traj,
-            'Nearby Agent Trajectories': other_agent_trajs
+            'Nearby Agent Trajectories': other_agent_trajs,
+            'Language Condition': language_condition_data[sid_egoid],
         }
         
         output_data[sid_egoid] = sample_data

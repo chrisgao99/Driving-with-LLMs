@@ -168,5 +168,4 @@ data/*.pkl
 
 *.pkl
 
-stage_1_data/*
 models/*

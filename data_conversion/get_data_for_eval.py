@@ -3,11 +3,7 @@ import traceback
 from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor
 import numpy as np
-import os
-import sys
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-sys.path.append(parent_dir)
+
 from data_conversion.get_data_utils import process_map_data, extract_tfrecord, format_dict, extract_road_segments
 
 
@@ -287,7 +283,7 @@ def run_vectorize_process(filename, setting="language_condition"):
     # Process trajectory dictionaries in parallel
     with ProcessPoolExecutor() as executor:
         tf_cleaned_traj_dicts = []
-        for traj_dict in tqdm(list_trajectory_dict, desc='Cleaning Trajectories'):
+        for traj_dict in list_trajectory_dict:
             tf_cleaned_traj_dicts.append(process_trajectory_dict(traj_dict))
 
     # Combine the results
@@ -316,7 +312,7 @@ def run_vectorize_process(filename, setting="language_condition"):
     # filter map and trajectory data by ego traj proximity
     valid_indices = {}
     list_of_valid_map = []
-    for qa_dict in tqdm(qa_data, desc='Filtering Valid Indices'):
+    for qa_dict in qa_data:
         sid = qa_dict['sid']
         ego_id = qa_dict['agent_id']
         if sid not in tf_map_dict:
@@ -344,11 +340,7 @@ def run_vectorize_process(filename, setting="language_condition"):
             continue
 
     with ProcessPoolExecutor() as executor:
-        road_segments = list(tqdm(
-            executor.map(extract_road_segments, list_of_valid_map),
-            total=len(list_of_valid_map),
-            desc="Extracting road segments"
-        ))
+        road_segments = list(executor.map(extract_road_segments, list_of_valid_map))
 
     empty_road_segments = []
     for i, road_segment in enumerate(road_segments):
