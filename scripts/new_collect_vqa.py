@@ -14,7 +14,8 @@ from data_conversion.convert_data_utils import convert_to_descriptor_format
 from data_conversion.convert_data import convert_data
 from utils.new_prompt_utils import make_waymo_observation_prompt
 
-client = openai.OpenAI(api_key="xx") # Replace "xx" with your actual OpenAI API key
+
+client = openai.OpenAI() ## loading api from env variable OPENAI_API_KEY
 
 def make_context():
     prompt = f"""I am a certified professional driving instructor and I am currently demonstrating driving in different scenarios of London to a student.
@@ -384,56 +385,124 @@ def get_qa_descriptor(total_scene_data, output_dir=None, timesteps_per_scene=Non
                 response.append({"question": language_instruction + " Predict the next ego vehicle waypoint.", "answer": str(next_waypoint)})
                 data_with_qa["response content"] = response
                 scene_qa_data.append(data_with_qa)
-            
-            all_scenes_qa_data[scene_id] = scene_qa_data
-            
-        return all_scenes_qa_data
     else:
-        # Fallback to processing scenes individually (existing logic)
-        all_scenes_qa_data = {}
+        # Non-batch processing with chunking and saving like batch mode
+        if output_dir is None:
+            raise ValueError("output_dir must be provided for saving results")
+        
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Prepare all requests like in batch mode
+        all_requests = []
+        scene_timestep_mapping = {}
+        
         for scene_id, scene_info in total_scene_data.items():
             sample_data = scene_info["scene_data"]
             list_of_converted_data = scene_info["converted_data"]
             
-            # Apply timestep sampling if specified
+            ego_traj = sample_data['Ego Trajectory']['trajectory']
+            language_instruction = sample_data['Language Condition']
+            
+            # Sample timesteps if specified
             if timesteps_per_scene is not None:
-                ego_traj = sample_data['Ego Trajectory']['trajectory']
                 max_timesteps = min(timesteps_per_scene, ego_traj.shape[0])
                 sampled_indices = np.random.choice(ego_traj.shape[0], size=max_timesteps, replace=False)
-                sampled_indices = sorted(sampled_indices)
-                list_of_converted_data = [list_of_converted_data[i] for i in sampled_indices]
-                
-                # Create a modified sample_data with sampled trajectory
-                modified_sample_data = sample_data.copy()
-                modified_sample_data['Ego Trajectory'] = {'trajectory': ego_traj[sampled_indices]}
+                sampled_indices = sorted(sampled_indices)  # Keep temporal order
             else:
-                modified_sample_data = sample_data
+                sampled_indices = list(range(ego_traj.shape[0]))
             
-            # Process single scene (reuse existing logic)
-            if use_parallel:
-                args_list = [
-                    (i, modified_sample_data['Ego Trajectory']['trajectory'], modified_sample_data['Language Condition'], list_of_converted_data[i])
-                    for i in range(len(list_of_converted_data))
-                ]
+            for t in sampled_indices:
+                next_waypoint = ego_traj[t + 1] if t + 1 < ego_traj.shape[0] else ego_traj[t]
+                lang_gen = make_waymo_observation_prompt(list_of_converted_data[t])
                 
-                with Pool(processes=num_workers) as pool:
-                    results = list(tqdm(pool.imap(process_single_timestep, args_list), 
-                                      total=len(args_list), 
-                                      desc=f"Processing scene {scene_id}"))
-                
-                results.sort(key=lambda x: x[0])
-                scene_qa_data = [result[1] for result in results]
-            else:
-                scene_qa_data = []
-                ego_traj = modified_sample_data['Ego Trajectory']['trajectory']
-                language_instruction = modified_sample_data['Language Condition']
-                for t in range(len(list_of_converted_data)):
-                    _, data_with_qa = process_single_timestep((t, ego_traj, language_instruction, list_of_converted_data[t]))
-                    scene_qa_data.append(data_with_qa)
-            
-            all_scenes_qa_data[scene_id] = scene_qa_data
+                request_data = {
+                    'scene_id': scene_id,
+                    'timestep': t,
+                    'language_instruction': language_instruction,
+                    'next_waypoint': next_waypoint,
+                    'lang_gen': lang_gen,
+                    'converted_data_t': list_of_converted_data[t]
+                }
+                all_requests.append(request_data)
+                custom_id = f"scene_{scene_id}_timestep_{t}"
+                scene_timestep_mapping[custom_id] = (scene_id, t)
         
-        return all_scenes_qa_data
+        all_single_results = {}
+        
+        # Process requests in chunks
+        for i in tqdm(range(30, len(all_requests), batch_size_limit), desc="Processing chunks"):
+            chunk_requests = all_requests[i:i + batch_size_limit]
+            
+            # Process each request in the chunk individually
+            chunk_results = {}
+            for request_data in tqdm(chunk_requests, desc=f"Processing chunk {i//batch_size_limit + 1}", leave=False):
+                scene_id = request_data['scene_id']
+                timestep = request_data['timestep']
+                
+                try:
+                    # Make single API call
+                    response_content = make_description_from_prompt(
+                        request_data['language_instruction'],
+                        request_data['next_waypoint'],
+                        request_data['lang_gen']
+                    )
+                    
+                    if scene_id not in chunk_results:
+                        chunk_results[scene_id] = {}
+                    chunk_results[scene_id][timestep] = response_content
+                    
+                except Exception as e:
+                    print(f"Error processing scene {scene_id}, timestep {timestep}: {e}")
+                    continue
+            
+            # Merge chunk results
+            for scene_id, timestep_results in chunk_results.items():
+                if scene_id not in all_single_results:
+                    all_single_results[scene_id] = {}
+                all_single_results[scene_id].update(timestep_results)
+            
+            # Process and save results after each chunk (same as batch mode)
+            current_scenes_qa_data = {}
+            for scene_id, scene_info in total_scene_data.items():
+                if scene_id not in all_single_results:
+                    continue
+                    
+                sample_data = scene_info["scene_data"]
+                list_of_converted_data = scene_info["converted_data"]
+                ego_traj = sample_data['Ego Trajectory']['trajectory']
+                language_instruction = sample_data['Language Condition']
+                
+                scene_qa_data = []
+                scene_results = all_single_results.get(scene_id, {})
+                
+                for timestep in sorted(scene_results.keys()):
+                    next_waypoint = ego_traj[timestep + 1] if timestep + 1 < ego_traj.shape[0] else ego_traj[timestep]
+                    lang_gen = make_waymo_observation_prompt(list_of_converted_data[timestep])
+                    
+                    data_with_qa = {
+                        "frame_num": timestep,
+                        "observation": list_of_converted_data[timestep], 
+                        "input_prompt": lang_gen,
+                        "response_content": None,
+                    }
+                    
+                    # Parse the response (same format as batch)
+                    response = scene_results[timestep]
+                    response = response.split('\n')
+                    try:
+                        response = [json.loads(line) for line in response if line.strip() and line.startswith('{') and line.endswith('}')]
+                    except:
+                        continue
+                    response.append({"question": language_instruction + " Predict the next ego vehicle waypoint.", "answer": str(next_waypoint)})
+                    data_with_qa["response content"] = response
+                    scene_qa_data.append(data_with_qa)
+                
+                current_scenes_qa_data[scene_id] = scene_qa_data
+            
+            # Save current results after each chunk
+            chunk_output_path = os.path.join(output_dir, f"all_scenes_qa_data_chunk_{i//batch_size_limit + 1}.pkl")
+            with open(chunk_output_path, "wb") as f:
+                pickle.dump(current_scenes_qa_data, f)
 
 def process_tfrecord_for_qa(tfrecord_path, scene_sampling=10):
     try:
@@ -495,8 +564,4 @@ if __name__ == "__main__":
         total_scene_data = pickle.load(f)
 
     # Process all scenes with timestep sampling and batch size limit
-    all_scenes_qa_data = get_qa_descriptor(total_scene_data, output_dir, timesteps_per_scene=3, use_batch=True, batch_size_limit=100)
-    
-    output_path = os.path.join(output_dir, "all_scenes_qa_data.pkl")
-    with open(output_path, "wb") as f:
-        pickle.dump(all_scenes_qa_data, f)
+    all_scenes_qa_data = get_qa_descriptor(total_scene_data, output_dir, timesteps_per_scene=3, use_batch=False, batch_size_limit=100)
