@@ -1,10 +1,11 @@
+import json
 import math
 import numpy as np
 import textwrap
 import openai
 import re
 import os
-from get_data_for_eval import run_vectorize_process, find_nearby_road, find_nearby_agents
+from data_conversion.get_data_for_eval import run_vectorize_process, find_nearby_road, find_nearby_agents
 
 class WaypointAgent:
     """
@@ -18,8 +19,7 @@ class WaypointAgent:
         self.delimiter = "####"
         # It's better to get the API key from an environment variable,
         # but this will use the hardcoded key as requested.
-        self.api_key = "api key here"
-        self.client = openai.OpenAI(api_key=self.api_key)
+        self.client = openai.OpenAI()
 
 
     def _calculate_dynamics(self, trajectory: np.ndarray, current_time_idx: int, dt: float = 0.5):
@@ -39,7 +39,7 @@ class WaypointAgent:
             acceleration = (speed - speed_prev) / dt
         return speed, heading_deg, acceleration
 
-    def generate_waypoint_prompt(self, scene_data: dict, current_time_idx: int) -> str:
+    def generate_waypoint_prompt(self, scene_data: dict, current_time_idx: int, ego_id: int) -> str:
         """Constructs a detailed prompt for an LLM to predict the next waypoint."""
         ego_traj = scene_data['Ego Trajectory']['trajectory']
         ego_x, ego_y = ego_traj[current_time_idx]
@@ -52,6 +52,10 @@ class WaypointAgent:
 
         surrounding_vehicles_desc = []
         for agent_id, agent_data in scene_data.get('Nearby Agent Trajectories', {}).items():
+            # *** FIX: Explicitly skip the ego vehicle ID ***
+            if agent_id == ego_id:
+                continue
+
             agent_traj = agent_data['trajectory']
             if current_time_idx >= len(agent_traj) or np.all(agent_traj[current_time_idx] == -1):
                 continue
@@ -88,17 +92,22 @@ class WaypointAgent:
         road_layout_str = "\n".join(road_layout_desc)
         driving_intention = scene_data.get('Language Condition', 'Navigate safely and efficiently.')
         
-        human_message = f"""\
-        {self.delimiter} Driving Scenario Description {self.delimiter}
-        Ego Vehicle State:
-        {ego_state_desc}
-        Surrounding Vehicles:
-        {surrounding_vehicles_str}
-        Road Layout:
-        {road_layout_str}
-        {self.delimiter} Your Task {self.delimiter}
-        Driving Intention: {driving_intention}
-        Based on the complete scenario, predict the single most probable (x, y) coordinate for the ego vehicle's next waypoint in 0.5 seconds."""
+        human_message = f"""
+{self.delimiter} Driving Scenario Description {self.delimiter}
+Ego Vehicle State:
+{ego_state_desc}
+Surrounding Vehicles:
+{surrounding_vehicles_str}
+Road Layout:
+{road_layout_str}
+{self.delimiter} Your Task {self.delimiter}
+Driving Intention: {driving_intention}
+Based on the complete scenario, predict the single most probable (x, y) coordinate for the ego vehicle's next waypoint in 0.5 seconds.
+
+A reasonable acceleration/deceleration on cars is roughly from 1.0m/s^2 to 4.0m/s^2, depending on the road condition and driving intention.
+To choose a reasonable speed and acceleration, consider the road's structure and layout, curvature, and traffic around you. 
+Match your target speed to legal limits and the flow of traffic, and make sure that change of speed falls into the reasonable acceleration range.
+"""
         
         return f"---SYSTEM MESSAGE---\n{system_message}\n\n---HUMAN MESSAGE---\n{human_message}"
 
@@ -117,13 +126,13 @@ class WaypointAgent:
             human_prompt = parts[1].strip()
 
             response = self.client.chat.completions.create(
-                model="gpt-4",  # Or "gpt-3.5-turbo"
+                model="gpt-5-nano",  # Or "gpt-3.5-turbo"
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": human_prompt}
                 ],
-                temperature=0.0,
-                max_tokens=25
+                # temperature=0.0,
+                # max_tokens=25
             )
             content = response.choices[0].message.content.strip()
 
@@ -258,11 +267,11 @@ def querry_gpt_dilu(tfrecord_path: str):
             predicted_trajectory_points.append(dynamic_ego_trajectory[i])
 
         # Loop through each valid time step for the current scenario
-        for time_idx in range(2, len(ego_traj_data['trajectory'])):
+        for time_idx in range(1, len(ego_traj_data['trajectory'])):
             print(f"\n-- Predicting for Timestep: {time_idx} --")
             
             # 1. Generate the prompt using the current state of the dynamic trajectory
-            final_prompt = agent.generate_waypoint_prompt(sample_data, current_time_idx=time_idx)
+            final_prompt = agent.generate_waypoint_prompt(sample_data, current_time_idx=time_idx, ego_id=ego_id)
             print(f"Generated Prompt:\n{final_prompt}\n")
             
             # 2. Query GPT with the prompt
@@ -291,7 +300,15 @@ def querry_gpt_dilu(tfrecord_path: str):
 
         print("groud truth trajectory: ", ego_traj_data['trajectory'])
         print(f"Finished processing scenario {sid} with ego ID {ego_id}.")
-        breakpoint()
+        
+        with open(f"dilu_prediction.json", "a") as f:
+            json.dump({
+                "sid": sid,
+                "ego_id": ego_id,
+                "predicted_trajectory": full_predicted_trajectory.tolist() if len(predicted_trajectory_points) > 2 else [],
+                "ground_truth_trajectory": ego_traj_data['trajectory'].tolist()
+            }, f)
+            f.write("\n")
 
 if __name__ == '__main__':
     # This path should point to your actual TFRecord file.

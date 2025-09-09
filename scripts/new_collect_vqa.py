@@ -40,8 +40,6 @@ You must include these 6 questions, but please rephrase them in a natural way:
 - Summarize the current driving scenario in high level / describe the current situation
 
 When asked about ego car's driving plan, only return the answer by rephrasing the language instruction.
-
-When asked about ego car's next waypoint, always answer with the ground truth next_waypoint.
 """
     return prompt
 
@@ -61,7 +59,7 @@ def make_description_from_prompt(language_instruction, next_waypoint, lang_gen):
     context = make_context()
     input_prompt = make_prompt(language_instruction, next_waypoint, lang_gen)
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="gpt-5-nano",
         messages=[
             {"role": "system", "content": context},
             {"role": "user", "content": input_prompt},
@@ -91,7 +89,7 @@ def process_single_timestep(args):
     response = response.split('\n')
     response = [json.loads(line) for line in response if line.strip() and line.startswith('{') and line.endswith('}')]
     response.append({"question": language_instruction + " Predict the next ego vehicle waypoint.", "answer": str(next_waypoint)})
-    data_with_qa["response content"] = response
+    data_with_qa["response_content"] = response
     
     return t, data_with_qa
 
@@ -113,7 +111,7 @@ def prepare_batch_requests(list_of_converted_data, sample_data):
             "method": "POST",
             "url": "/v1/chat/completions",
             "body": {
-                "model": "gpt-4o-mini",
+                "model": "gpt-5-nano",
                 "messages": [
                     {"role": "system", "content": context},
                     {"role": "user", "content": input_prompt},
@@ -243,7 +241,7 @@ def prepare_batch_requests_multi_scene(total_scene_data, timesteps_per_scene=Non
                 "method": "POST",
                 "url": "/v1/chat/completions",
                 "body": {
-                    "model": "gpt-4o-mini",
+                    "model": "gpt-5-nano",
                     "messages": [
                         {"role": "system", "content": context},
                         {"role": "user", "content": input_prompt},
@@ -300,6 +298,8 @@ def get_qa_descriptor(total_scene_data, output_dir=None, timesteps_per_scene=Non
         
         # Process requests in chunks
         for i in tqdm(range(0, len(batch_requests), batch_size_limit), desc="Processing batches"):
+            if (i//batch_size_limit + 1) <= 4:
+                continue
             chunk_requests = batch_requests[i:i + batch_size_limit]
             chunk_mapping = {k: v for k, v in scene_timestep_mapping.items() 
                            if k in [req['custom_id'] for req in chunk_requests]}
@@ -312,7 +312,6 @@ def get_qa_descriptor(total_scene_data, output_dir=None, timesteps_per_scene=Non
                 if scene_id not in all_batch_results:
                     all_batch_results[scene_id] = {}
                 all_batch_results[scene_id].update(timestep_results)
-            
             # Process and save results after each chunk
             current_scenes_qa_data = {}
             for scene_id, scene_info in total_scene_data.items():
@@ -341,18 +340,21 @@ def get_qa_descriptor(total_scene_data, output_dir=None, timesteps_per_scene=Non
                     # Parse the batch response
                     response = scene_results[timestep]
                     response = response.split('\n')
-                    try:
-                        response = [json.loads(line) for line in response if line.strip() and line.startswith('{') and line.endswith('}')]
-                    except:
-                        continue
+                    for idx in range(len(response)):
+                        try:
+                            response[idx] = json.loads(response[idx])
+                        except:
+                            continue
                     response.append({"question": language_instruction + " Predict the next ego vehicle waypoint.", "answer": str(next_waypoint)})
-                    data_with_qa["response content"] = response
+                    data_with_qa["response_content"] = response
                     scene_qa_data.append(data_with_qa)
                 
                 current_scenes_qa_data[scene_id] = scene_qa_data
             
             # Save current results after each chunk
             chunk_output_path = os.path.join(output_dir, f"all_scenes_qa_data_chunk_{i//batch_size_limit + 1}.pkl")
+            print(f"Saving chunk results to {chunk_output_path}")
+            breakpoint()
             with open(chunk_output_path, "wb") as f:
                 pickle.dump(current_scenes_qa_data, f)
         
@@ -383,7 +385,7 @@ def get_qa_descriptor(total_scene_data, output_dir=None, timesteps_per_scene=Non
                 response = response.split('\n')
                 response = [json.loads(line) for line in response if line.strip() and line.startswith('{') and line.endswith('}')]
                 response.append({"question": language_instruction + " Predict the next ego vehicle waypoint.", "answer": str(next_waypoint)})
-                data_with_qa["response content"] = response
+                data_with_qa["response_content"] = response
                 scene_qa_data.append(data_with_qa)
     else:
         # Non-batch processing with chunking and saving like batch mode
@@ -430,7 +432,7 @@ def get_qa_descriptor(total_scene_data, output_dir=None, timesteps_per_scene=Non
         all_single_results = {}
         
         # Process requests in chunks
-        for i in tqdm(range(30, len(all_requests), batch_size_limit), desc="Processing chunks"):
+        for i in tqdm(range(0, len(all_requests), batch_size_limit), desc="Processing chunks"):
             chunk_requests = all_requests[i:i + batch_size_limit]
             
             # Process each request in the chunk individually
@@ -494,7 +496,7 @@ def get_qa_descriptor(total_scene_data, output_dir=None, timesteps_per_scene=Non
                     except:
                         continue
                     response.append({"question": language_instruction + " Predict the next ego vehicle waypoint.", "answer": str(next_waypoint)})
-                    data_with_qa["response content"] = response
+                    data_with_qa["response_content"] = response
                     scene_qa_data.append(data_with_qa)
                 
                 current_scenes_qa_data[scene_id] = scene_qa_data
@@ -537,7 +539,7 @@ if __name__ == "__main__":
 
     np.random.seed(42)
 
-    # total_scene_data = {}
+    total_scene_data = {}
 
     # total_batch_dir = os.listdir(batch_dir)
     # total_batch_dir = np.random.choice(total_batch_dir, size=20, replace=False).tolist()
@@ -564,4 +566,4 @@ if __name__ == "__main__":
         total_scene_data = pickle.load(f)
 
     # Process all scenes with timestep sampling and batch size limit
-    all_scenes_qa_data = get_qa_descriptor(total_scene_data, output_dir, timesteps_per_scene=3, use_batch=False, batch_size_limit=100)
+    all_scenes_qa_data = get_qa_descriptor(total_scene_data, output_dir, timesteps_per_scene=3, use_batch=True, batch_size_limit=1000)

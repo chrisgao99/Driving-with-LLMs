@@ -1,4 +1,4 @@
-from utils.stage_1_training_utils import get_train_val_data
+from utils.waymo_training_utils import get_train_val_data
 from utils.model_utils import load_llama_tokenizer
 
 

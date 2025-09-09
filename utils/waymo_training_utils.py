@@ -20,18 +20,6 @@ from utils.new_vector_utils import (
 )
 
 INSTRUCTION = "You are a certified professional driving instructor and please tell me step by step how to drive a car based on the input scenario."
-ACTION_Q = [
-    "How are you going to drive in this situation?",
-    "What actions are you taking?",
-    "Why are you taking these specific driving actions?",
-    "How are you navigating this situation?",
-    "What actions will be taken in this situation?",
-    "How are you driving in this situation?",
-    "What are your current actions?",
-    "What are your planned actions for this situation?",
-    "How are you managing the car?",
-    "What are your actions?",
-]
 DEFAULT_EVAL_ITEMS = ["caption", "action"]
 
 
@@ -238,8 +226,7 @@ def _load_vqa_pickle_dataset(
     max_size=None,
     legacy_parser=False,
 ):
-    if dataset_items is None:
-        dataset_items = ["vqa", "caption"]
+    dataset_items = ["vqa", "caption"]
     with open(data_path, "rb") as f:
         data = pickle.load(f)
     data_dict: Dict[str, List[Any]] = {
@@ -254,31 +241,37 @@ def _load_vqa_pickle_dataset(
     }
     if add_input_prompt:
         data_dict["input_prompt"] = []
-    for d in data:
-        # VQA
-        if "vqa" in dataset_items:
-            obs_dict = d["observation"]
-            for json_dict in d["response_content"]:
+    for sid_aid, scene_steps in data.items():
+        for d in scene_steps:
+            # VQA
+            if "vqa" in dataset_items:
+                obs_dict = d["observation"]
+                for json_dict in d["response_content"]:
+                    try:
+                        if isinstance(json_dict, str):
+                            json_dict = json.loads(json_dict) 
+                    except:
+                        continue
+                    data_dict["frame_num"].append(d["frame_num"])
+                    data_dict["input"].append("")
+                    data_dict["instruction"].append(json_dict["question"])
+                    data_dict["output"].append(str(json_dict["answer"]))
+                    _append_descriptors(data_dict, obs_dict)
+                    if add_input_prompt:
+                        data_dict["input_prompt"].append(d["input_prompt"])
+            # Captioning
+            if "caption" in dataset_items:
                 data_dict["frame_num"].append(d["frame_num"])
                 data_dict["input"].append("")
-                data_dict["instruction"].append(json_dict["question"])
-                data_dict["output"].append(json_dict["answer"])
-                _append_descriptors(data_dict, obs_dict)
+                data_dict["instruction"].append(INSTRUCTION)
+                data_dict["output"].append(d["input_prompt"])
+                _append_descriptors(data_dict, d["observation"])
                 if add_input_prompt:
                     data_dict["input_prompt"].append(d["input_prompt"])
-        # Captioning
-        if "caption" in dataset_items:
-            data_dict["frame_num"].append(d["frame_num"])
-            data_dict["input"].append("")
-            data_dict["instruction"].append(INSTRUCTION)
-            data_dict["output"].append(make_observation_prompt(d["observation"]))
-            _append_descriptors(data_dict, d["observation"])
-            if add_input_prompt:
-                data_dict["input_prompt"].append(d["input_prompt"])
 
-        if max_size is not None and len(data_dict["frame_num"]) >= max_size:
-            break
-
+            if max_size is not None and len(data_dict["frame_num"]) >= max_size:
+                break
+    
     return Dataset.from_dict(data_dict)
 
 

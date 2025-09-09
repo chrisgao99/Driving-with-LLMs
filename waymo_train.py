@@ -1,5 +1,6 @@
 # pylint: skip-file
 import datetime
+import json
 import os
 import tempfile
 from typing import List, Optional, Tuple
@@ -12,7 +13,7 @@ from transformers import logging  # noqa: F402
 
 import wandb
 from utils.model_utils import load_llama_tokenizer, load_model
-from utils.stage_1_training_utils import (
+from utils.waymo_training_utils import (
     DEFAULT_EVAL_ITEMS,
     decode_generation_seqeunces,
     eval_action,
@@ -32,6 +33,50 @@ class TrainerWithGeneration(transformers.Seq2SeqTrainer):
         self.vqa = kwargs.pop("vqa", False)
         super().__init__(*args, **kwargs)
         self.tokenizer = kwargs["data_collator"].tokenizer
+
+    def evaluation_loop(
+        self,
+        dataloader,
+        description,
+        prediction_loss_only=None,
+        ignore_keys=None,
+        metric_key_prefix="eval",
+    ):
+        """
+        Overrided method to perform evaluation loop with custom eval and logging.
+        """
+
+        # ensure prediction loss is set to False
+        prediction_loss_only = False
+
+        # call parent class method to get the evaluation outputs
+        eval_output = super().evaluation_loop(
+            dataloader,
+            description,
+            prediction_loss_only,
+            ignore_keys,
+            metric_key_prefix,
+        )
+
+        # Perform additional operations based on evaluation output
+        all_pred_tokens = (
+            eval_output.predictions if self.vqa else eval_output.predictions[:, 77:]
+        )  # remove the prompt for easier comparison
+        all_pred = decode_generation_seqeunces(self.tokenizer, all_pred_tokens)
+        all_label = decode_generation_seqeunces(self.tokenizer, eval_output.label_ids)
+        print("all_pred", all_pred)
+        print("all_label", all_label)
+        
+        with open("eval_output.json", "w") as f:
+            for pred, label in zip(all_pred, all_label):
+                out = {
+                    "pred": pred,
+                    "label": label,
+                }
+                f.write(json.dumps(out) + "\n")
+
+        return eval_output
+
 
 def train(
     # model/data params
